@@ -4,7 +4,7 @@ import com.springmvc.demo.service.DemoService;
 import com.springmvc.framework.annotations.IService;
 
 /**
- * @auth 邹新
+ * @auth Joeyzz7000
  * @email 741779841@qq.com
  * @date 2021/6/28
  */

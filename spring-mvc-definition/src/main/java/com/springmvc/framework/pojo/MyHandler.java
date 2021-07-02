@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * @auth 邹新
+ * @auth Joeyzz7000
  * @email 741779841@qq.com
  * @date 2021/6/28
  */
@@ -17,6 +17,9 @@ public class MyHandler {
     private Object targetObject;
 
     private Method method;
+
+    // 作为权限判断的属性
+    private String [] mySecurity;
 
     private Map<String, Integer>  paramsMap;
 
@@ -57,5 +60,13 @@ public class MyHandler {
 
     public void setParamsMap(Map<String, Integer> paramsMap) {
         this.paramsMap = paramsMap;
+    }
+
+    public String[] getMySecurity() {
+        return mySecurity;
+    }
+
+    public void setMySecurity(String[] mySecurity) {
+        this.mySecurity = mySecurity;
     }
 }

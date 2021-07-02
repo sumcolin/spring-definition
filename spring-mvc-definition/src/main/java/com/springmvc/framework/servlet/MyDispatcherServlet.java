@@ -1,10 +1,8 @@
 package com.springmvc.framework.servlet;
 
-import com.springmvc.framework.annotations.IAutowired;
-import com.springmvc.framework.annotations.IController;
-import com.springmvc.framework.annotations.IRequestMapping;
-import com.springmvc.framework.annotations.IService;
+import com.springmvc.framework.annotations.*;
 import com.springmvc.framework.pojo.MyHandler;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.ServletConfig;
@@ -22,9 +20,10 @@ import java.lang.reflect.Parameter;
 import java.net.URL;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
- * @auth 邹新
+ * @auth Joeyzz7000
  * @email 741779841@qq.com
  * @date 2021/6/28
  */
@@ -60,7 +59,7 @@ public class MyDispatcherServlet extends HttpServlet {
         // handlerMapping
         doHandlerMapping();
 
-        System.out.println("lagou mvc 初始化完成....");
+        System.out.println("mvc definition 初始化完成....");
     }
 
     private void doHandlerMapping() {
@@ -69,6 +68,12 @@ public class MyDispatcherServlet extends HttpServlet {
             Class<?> aClass = v.getClass();
             if (aClass.isAnnotationPresent(IController.class)) {
                 IRequestMapping aClassAnnotation = aClass.getAnnotation(IRequestMapping.class);
+                // 类级别的权限设置
+                ISecurity iSecurityClass = aClass.getAnnotation(ISecurity.class);
+                String[] iSecurityBaseNames = null;
+                if (iSecurityClass != null && iSecurityClass.value().length != 0) {
+                    iSecurityBaseNames = iSecurityClass.value();
+                }
                 String baseUrl = aClassAnnotation.value();
                 Method[] methods = aClass.getMethods();
                 for (Method method : methods) {
@@ -84,7 +89,13 @@ public class MyDispatcherServlet extends HttpServlet {
                             myHandler.getParamsMap().put(parameters[i].getName(), i);
                         }
                     }
-//                    handlerMap.put(methodUrl, myHandler);
+                    myHandler.setMySecurity(iSecurityBaseNames);
+                    // 方法级别也就是handler，获取标有ISecurity方法的权限
+                    ISecurity iSecurityMethod = method.getAnnotation(ISecurity.class);
+                    if (iSecurityMethod != null && iSecurityMethod.value().length != 0) {
+                        String[] bothSecurityNames = ArrayUtils.addAll(iSecurityBaseNames, iSecurityMethod.value());
+                        myHandler.setMySecurity(bothSecurityNames);
+                    }
                     handlerList.add(myHandler);
                 }
             }
@@ -198,7 +209,8 @@ public class MyDispatcherServlet extends HttpServlet {
     public void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
 //        super.doPost(req, resp);
         MyHandler handler = getHandler(req);
-        if (handler == null ){
+        // spring mvc 应用是否存在相应方法
+        if (handler == null) {
             resp.getWriter().println("404");
             return;
         }
@@ -211,16 +223,33 @@ public class MyDispatcherServlet extends HttpServlet {
         Object[] paraValues = new Object[parameterTypes.length];
 
         // 以下就是为了向参数数组中塞值，而且还得保证参数的顺序和方法中形参顺序一致
-
         Map<String, String[]> parameterMap = req.getParameterMap();
+        // 权限判断
+        String[] mySecurity = handler.getMySecurity();
+        if (mySecurity != null && mySecurity.length > 0) {
+            String[] usernames = parameterMap.get("username");
+            if (usernames == null || usernames.length == 0) {
+                resp.getWriter().println("303");
+                return;
+            }
+            String securityNames = StringUtils.join(mySecurity, ",");
+            for (String username : usernames) {
+                if (securityNames.indexOf(username) < 0) {
+                    resp.getWriter().println("303");
+                    return;
+                }
+            }
+        }
 
         // 遍历request中所有参数  （填充除了request，response之外的参数）
-        for(Map.Entry<String,String[]> param: parameterMap.entrySet()) {
+        for (Map.Entry<String, String[]> param : parameterMap.entrySet()) {
             // name=1&name=2   name [1,2]
             String value = StringUtils.join(param.getValue(), ",");  // 如同 1,2
 
             // 如果参数和方法中的参数匹配上了，填充数据
-            if(!handler.getParamsMap().containsKey(param.getKey())) {continue;}
+            if (!handler.getParamsMap().containsKey(param.getKey())) {
+                continue;
+            }
 
             // 方法形参确实有该参数，找到它的索引位置，对应的把参数值放入paraValues
             Integer index = handler.getParamsMap().get(param.getKey());//name在第 2 个位置
@@ -240,7 +269,8 @@ public class MyDispatcherServlet extends HttpServlet {
 
         // 最终调用handler的method属性
         try {
-            handler.getMethod().invoke(handler.getTargetObject(),paraValues);
+            Object invoke = handler.getMethod().invoke(handler.getTargetObject(), paraValues);
+            resp.getWriter().println(invoke);
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         } catch (InvocationTargetException e) {
@@ -250,6 +280,7 @@ public class MyDispatcherServlet extends HttpServlet {
 
     private MyHandler getHandler(HttpServletRequest req) {
         String requestURI = req.getRequestURI();
+//        StringBuffer requestURL = req.getRequestURL();
         for (MyHandler myHandler : handlerList) {
             if (myHandler.getPattern().matcher(requestURI).matches()) {
                 return myHandler;
